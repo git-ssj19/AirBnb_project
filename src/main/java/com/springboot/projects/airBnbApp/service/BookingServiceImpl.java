@@ -6,12 +6,14 @@ import com.springboot.projects.airBnbApp.dto.GuestDto;
 import com.springboot.projects.airBnbApp.entity.*;
 import com.springboot.projects.airBnbApp.entity.enums.BookingStatus;
 import com.springboot.projects.airBnbApp.exception.ResourceNotFoundException;
+import com.springboot.projects.airBnbApp.exception.UnauthorizedException;
 import com.springboot.projects.airBnbApp.repository.*;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -83,6 +85,13 @@ public class BookingServiceImpl implements BookingService{
     public BookingDto addGuests(Long bookingId, List<GuestDto> guestDtoList) {
         log.info("Adding guests to booking with id : {} ",bookingId);
         Booking booking = bookingRepository.findById(bookingId).orElseThrow(()->new ResourceNotFoundException("Booking not found with id : "+ bookingId));
+
+        User user = getCurrentUser();
+
+        if(!user.equals(booking.getUser())){
+            throw new UnauthorizedException("Booking does not belong to this user with id: " + user.getId());
+        }
+
         if(!isBookingActive(booking)){
             throw new IllegalStateException("Booking is not active or is expired");
         }
@@ -91,7 +100,7 @@ public class BookingServiceImpl implements BookingService{
         }
         for(GuestDto guestDto:guestDtoList){
             Guest guest = modelMapper.map(guestDto, Guest.class);
-            guest.setUser(getCurrentUser());
+            guest.setUser(user);
             guest = guestRepository.save(guest);
             booking.getGuests().add(guest);
         }
@@ -103,9 +112,7 @@ public class BookingServiceImpl implements BookingService{
     }
 
     private User getCurrentUser() {
-        User u = new User(); //TO DO- to remove dummy users
-        u.setId(1L);
-        return u;
+        return (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
     public Boolean isBookingActive(Booking booking){
